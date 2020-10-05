@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Swagger-to-Docs</title>
+
+	<link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/gh/cferdinandi/kraken@12.0.3/dist/main.min.css">
+
+	<style type="text/css">
+		body {
+			margin: 0 auto;
+			max-width: 80em;
+			width: 88%;
+		}
+
+		/*#app > div {
+			margin-bottom: 2em;
+		}
+
+		@media (min-width: 30em) {
+			#app {
+				display: grid;
+				grid-template-columns: repeat(2, 1fr);
+				grid-template-rows: 1fr;
+				grid-column-gap: 2em;
+				grid-row-gap: 0;
+			}
+		}
+
+		label {
+			display: block;
+			font-weight: bold;
+			width: 100%;
+		}
+
+		input,
+		textarea {
+			margin-bottom: 1em;
+		}
+
+		textarea {
+			min-height: 12em;
+			width: 100%;
+		}*/
+
+		@media (min-width: 30em) {
+			#app {
+				display: grid;
+				grid-template-columns: repeat(2, 1fr);
+				grid-template-rows: 1fr;
+				grid-column-gap: 2em;
+				grid-row-gap: 0;
+			}
+		}
+
+		label {
+			font-weight: bold;
+		}
+
+		textarea {
+			height: 100%;
+			min-height: 12em;
+			width: 100%;
+		}
+
+		[role="status"] {
+			margin-bottom: 1em;
+			min-height: 2em;
+			font-style: italic;
+		}
+	</style>
+</head>
+<body>
+
+	<h1>Swagger-to-Docs</h1>
+
+	<div>
+		<label for="swagger">Swagger Definition</label>
+		<input type="file" accept=".json,application/json" id="swagger">
+	</div>
+
+	<div role="status"></div>
+
+	<div id="app">
+		<div>
+			<label for="markup">Documentation HTML</label>
+			<textarea id="markup" readonly></textarea>
+		</div>
+		<div>
+			<strong>Preview</strong>
+			<div id="preview"></div>
+		</div>
+	</div>
+
+
+	<script src="https://polyfill.io/v3/polyfill.min.js?features=default%2CObject.values"></script>
+	<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/gh/cure53/dompurify@2/dist/purify.min.js"></script>
+	<script>
+		//
+		// @todo
+		//
+
+		// 1. Handle untagged items (or items that don't match an existing tag)
+		// 2. Make sure tags with no items don't return content
+
+		//
+		// Variables
+		//
+
+		// UI elements
+		var swagger = document.querySelector('#swagger');
+		var markup = document.querySelector('#markup');
+		var prevew = document.querySelector('#preview');
+		var notification = document.querySelector('[role="status"]');
+
+		// Data object
+		var docs = {};
+
+
+		//
+		// Methods
+		//
+
+
+		var generateSectionHTML = function (section, json) {
+
+			var html = Object.keys(json.paths).map(function (key) {
+				return Object.keys(json.paths[key]).map(function (method) {
+
+					var methodObj = json.paths[key][method];
+
+					// If this item isn't in this section, skip it
+					if (!methodObj.tags.includes(section.name)) return '';
+
+					return `
+						<h3><code>${method.toUpperCase()}</code> <code>${key}</code></h3>
+						${methodObj.description ? marked(methodObj.description) : ''}
+						${methodObj.summary && !methodObj.description ? marked(methodObj.summary) : ''}
+
+						<h4>Parameters</h4>
+						<p><em>Coming soon...</em></p>
+
+						<h4>Sample Request</h4>
+						<p><em>Coming soon...</em></p>
+
+						<h4>Sample Response</h4>
+						<p><em>Coming soon...</em></p>`;
+
+				}).join('');
+			}).join('');
+
+			// If there's no content, return an empty string
+			if (!html.length) return '';
+
+			return `
+				<h2>${section.name}</h2>
+				${section.description ? marked(section.description) : ''}
+				${section.externalDocs ?  Object.values(section.externalDocs).map(function (doc) { return marked.parseInline(doc); }).join(' ') : ''}
+
+				${html}`;
+
+		};
+
+		var generateHTML = function (json) {
+
+			// Get contact details
+			var contact = docs.info.contact ? Object.values(docs.info.contact).map(function (item) { return marked.parseInline(item); }) : null;
+
+			// Generate the HTML
+			var html =
+				`${docs.info.description ? marked(docs.info.description) : ''}
+				<ul class="docs-info">
+					${docs.info.version ? `<li><strong>Version:</strong> ${docs.info.version}</li>` : ''}
+					${docs.info.termsOfService ? `<li><strong>Terms of Use:</strong> <a href="${docs.info.termsOfService}">${docs.info.termsOfService}</a></li>` : ''}
+					${docs.info.license && docs.info.license.name ? `<li><strong>License:</strong> ${docs.info.license.url ? `<a href="${docs.info.license.url}">${docs.info.license.name}</a>` : docs.info.license.name}</li>` : ''}
+					${contact ? `<li><strong>Contact:</strong> ${contact.join(', ')}</li>` : ''}
+				</ul>
+
+				${docs.sections.map(function (section) {
+					return generateSectionHTML(section, json);
+				}).join('')}`;
+
+			// Sanitize it
+			var sanitized = DOMPurify.sanitize(html);
+
+			// Inject into the UI
+			markup.value = sanitized;
+			preview.innerHTML = sanitized;
+			notification.textContent = 'Static documentation based on your Swagger definition has been generated below.';
+
+		};
+
+		/**
+		 * Generate HTML
+		 * @param  {Event} event The event object
+		 */
+		var createDocs = function (event) {
+
+			// Convert string to JSON
+			var json = JSON.parse(event.target.result);
+			console.log('json', json);
+
+			// Get headings
+			docs.info = Object.assign({}, json.info);
+			docs.sections = Array.from(json.tags);
+			console.log('docs', docs);
+
+			// Generate the HTML
+			generateHTML(json);
+
+		};
+
+		/**
+		 * If there's an error reading the file, handle it
+		 * @todo  add proper error handling
+		 */
+		var handleError = function (event) {
+			console.warn(event);
+			notification.textContent = 'There was a problem processing your Swagger file. Please try again.';
+		};
+
+		/**
+		 * Handle file uploads
+		 */
+		var changeHandler = function () {
+
+			// Only run if there's a file
+			if (!swagger.files.length) return;
+
+			// Read the file
+			var reader = new FileReader();
+			reader.readAsText(swagger.files[0], 'UTF-8');
+
+			// After file is read
+			reader.onload = createDocs;
+			reader.onerror = handleError;
+
+		};
+
+
+		//
+		// Inits & Event Listener
+		//
+
+		swagger.addEventListener('change', changeHandler);
+	</script>
+
+</body>
+</html>
