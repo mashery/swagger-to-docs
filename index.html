@@ -12,46 +12,6 @@
 			width: 88%;
 		}
 
-		/*#app > div {
-			margin-bottom: 2em;
-		}
-
-		@media (min-width: 30em) {
-			#app {
-				display: grid;
-				grid-template-columns: repeat(2, 1fr);
-				grid-template-rows: 1fr;
-				grid-column-gap: 2em;
-				grid-row-gap: 0;
-			}
-		}
-
-		label {
-			display: block;
-			font-weight: bold;
-			width: 100%;
-		}
-
-		input,
-		textarea {
-			margin-bottom: 1em;
-		}
-
-		textarea {
-			min-height: 12em;
-			width: 100%;
-		}*/
-
-		@media (min-width: 30em) {
-			#app {
-				display: grid;
-				grid-template-columns: repeat(2, 1fr);
-				grid-template-rows: 1fr;
-				grid-column-gap: 2em;
-				grid-row-gap: 0;
-			}
-		}
-
 		label {
 			font-weight: bold;
 		}
@@ -80,16 +40,14 @@
 
 	<div role="status"></div>
 
-	<div id="app">
-		<div>
-			<label for="markup">Documentation HTML</label>
-			<textarea id="markup" readonly></textarea>
-		</div>
-		<div>
-			<strong>Preview</strong>
-			<div id="preview"></div>
-		</div>
-	</div>
+	<details class="margin-bottom">
+		<summary class="margin-bottom-small"><strong>Get the HTML</strong></summary>
+		<label class="visually-hidden" for="markup">Documentation HTML</label>
+		<textarea id="markup" readonly></textarea>
+	</details>
+
+	<strong>Preview</strong>
+	<div id="preview"><em>Upload a Swagger definition to produce documenation.</em></div>
 
 
 	<script src="https://polyfill.io/v3/polyfill.min.js?features=default%2CObject.values"></script>
@@ -102,6 +60,7 @@
 
 		// 1. Handle untagged items (or items that don't match an existing tag)
 		// 2. Make sure tags with no items don't return content
+		// 3. Add items property to params table
 
 		//
 		// Variables
@@ -113,14 +72,40 @@
 		var prevew = document.querySelector('#preview');
 		var notification = document.querySelector('[role="status"]');
 
-		// Data object
-		var docs = {};
-
 
 		//
 		// Methods
 		//
 
+		var getParamsTable = function (params) {
+			if (!params.length) return '';
+
+			return `
+				<h4>Parameters</h4>
+				<table>
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>Description</th>
+							<th>Type</th>
+							<th>In</th>
+							<th>Required</th>
+						</tr>
+					</thead>
+					<tbody>
+						${params.map(function (param) {
+							return `
+								<tr>
+									<td><code>${param.name}</code></td>
+									<td>${param.description ? param.description : ''}</td>
+									<td>${param.type ? param.type : ''}</td>
+									<td>${param.in ? param.in : ''}</td>
+									<td><code>${param.required ? param.required : 'false'}</code></td>
+								</tr>`;
+						}).join('')}
+					</tbody>
+				</table>`;
+		};
 
 		var generateSectionHTML = function (section, json) {
 
@@ -137,8 +122,13 @@
 						${methodObj.description ? marked(methodObj.description) : ''}
 						${methodObj.summary && !methodObj.description ? marked(methodObj.summary) : ''}
 
-						<h4>Parameters</h4>
-						<p><em>Coming soon...</em></p>
+						${methodObj.consumes || methodObj.produces ? `
+						<ul>
+							${methodObj.consumes ? `<li><strong>Request Formats:</strong> ${methodObj.consumes.join(', ')}</li>` : ''}
+							${methodObj.produces ? `<li><strong>Response Formats:</strong> ${methodObj.produces.join(', ')}</li>` : ''}
+						</ul>` : ''}
+
+						${getParamsTable(methodObj.parameters)}
 
 						<h4>Sample Request</h4>
 						<p><em>Coming soon...</em></p>
@@ -164,19 +154,19 @@
 		var generateHTML = function (json) {
 
 			// Get contact details
-			var contact = docs.info.contact ? Object.values(docs.info.contact).map(function (item) { return marked.parseInline(item); }) : null;
+			var contact = json.info.contact ? Object.values(json.info.contact).map(function (item) { return marked.parseInline(item); }) : null;
 
 			// Generate the HTML
 			var html =
-				`${docs.info.description ? marked(docs.info.description) : ''}
+				`${json.info.description ? marked(json.info.description) : ''}
 				<ul class="docs-info">
-					${docs.info.version ? `<li><strong>Version:</strong> ${docs.info.version}</li>` : ''}
-					${docs.info.termsOfService ? `<li><strong>Terms of Use:</strong> <a href="${docs.info.termsOfService}">${docs.info.termsOfService}</a></li>` : ''}
-					${docs.info.license && docs.info.license.name ? `<li><strong>License:</strong> ${docs.info.license.url ? `<a href="${docs.info.license.url}">${docs.info.license.name}</a>` : docs.info.license.name}</li>` : ''}
+					${json.info.version ? `<li><strong>Version:</strong> ${json.info.version}</li>` : ''}
+					${json.info.termsOfService ? `<li><strong>Terms of Use:</strong> <a href="${json.info.termsOfService}">${json.info.termsOfService}</a></li>` : ''}
+					${json.info.license && json.info.license.name ? `<li><strong>License:</strong> ${json.info.license.url ? `<a href="${json.info.license.url}">${json.info.license.name}</a>` : json.info.license.name}</li>` : ''}
 					${contact ? `<li><strong>Contact:</strong> ${contact.join(', ')}</li>` : ''}
 				</ul>
 
-				${docs.sections.map(function (section) {
+				${json.tags.map(function (section) {
 					return generateSectionHTML(section, json);
 				}).join('')}`;
 
@@ -198,12 +188,7 @@
 
 			// Convert string to JSON
 			var json = JSON.parse(event.target.result);
-			console.log('json', json);
-
-			// Get headings
-			docs.info = Object.assign({}, json.info);
-			docs.sections = Array.from(json.tags);
-			console.log('docs', docs);
+			console.log(json);
 
 			// Generate the HTML
 			generateHTML(json);
