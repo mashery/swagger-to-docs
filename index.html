@@ -89,17 +89,31 @@
 							<th>Description</th>
 							<th>Type</th>
 							<th>In</th>
+							<th>Values</th>
 							<th>Required</th>
 						</tr>
 					</thead>
 					<tbody>
 						${params.map(function (param) {
+
+							console.log(param.name, param.schema);
+
+							// Add item options if available
+							var val = [];
+							if (param.items && param.items.enum) {
+								val.push(param.items.enum.map(function (item) { return `<code>${item}</code>` }).join(', '));
+							}
+							if (param.items && param.items.default) {
+								val.push(`<strong>Default:</strong> <code>${param.items.default}</code>`)
+							}
+
 							return `
 								<tr>
 									<td><code>${param.name}</code></td>
 									<td>${param.description ? param.description : ''}</td>
 									<td>${param.type ? param.type : ''}</td>
 									<td>${param.in ? param.in : ''}</td>
+									<td>${val.join('<br>')}</td>
 									<td><code>${param.required ? param.required : 'false'}</code></td>
 								</tr>`;
 						}).join('')}
